@@ -108,6 +108,96 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     );
   }
 
+  void _showWhatsAppDialog() {
+    final phone = widget.order.customerPhone?.trim() ?? '';
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No customer phone number available')),
+      );
+      return;
+    }
+
+    final defaultMsg = 'Salam ${widget.order.customerName}! 🍕\n\n'
+        'Aapka Order #${widget.order.orderNumber} update:\n'
+        'Status: ${_currentStatus.toUpperCase()}\n'
+        'Total: Rs. ${widget.order.total.toStringAsFixed(0)}\n\n'
+        '📍 Live Status Tracker:\n${AppConstants.orderTrackerBaseUrl}/track/${widget.order.orderNumber}\n\n'
+        'Thank you for ordering with SoleWhat!';
+
+    final textCtrl = TextEditingController(text: defaultMsg);
+    bool isSending = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: AppConstants.radius5),
+          title: Row(
+            children: const [
+              Icon(Icons.chat_bubble_rounded, color: Colors.green),
+              SizedBox(width: 8),
+              Text('SoleWhat AI WhatsApp', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('To: $phone', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppConstants.textMuted)),
+              const SizedBox(height: 10),
+              TextField(
+                controller: textCtrl,
+                maxLines: 5,
+                style: const TextStyle(fontSize: 12),
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: AppConstants.radius5),
+                  contentPadding: const EdgeInsets.all(10),
+                  hintText: 'Enter WhatsApp message...',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              icon: isSending
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.send, size: 14),
+              label: const Text('Send via AI Gateway'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: AppConstants.radius5),
+              ),
+              onPressed: isSending
+                  ? null
+                  : () async {
+                      setDialogState(() => isSending = true);
+                      final res = await SupabaseService.instance.sendWhatsAppMessage(
+                        toPhone: phone,
+                        message: textCtrl.text.trim(),
+                        shopId: widget.order.shopId,
+                      );
+                      if (dialogCtx.mounted) {
+                        Navigator.pop(dialogCtx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(res['success'] == true ? '✓ WhatsApp message sent to customer!' : 'Failed: ${res['error']}'),
+                            backgroundColor: res['success'] == true ? Colors.green.shade800 : Colors.red,
+                          ),
+                        );
+                      }
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showAssignRiderSheet() async {
     final riderCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
@@ -490,19 +580,36 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.replay_rounded, size: 16),
-                      label: const Text('Recreate This Order', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppConstants.textDark,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: AppConstants.radius5),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
+                          label: const Text('Send WhatsApp', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: AppConstants.radius5),
+                          ),
+                          onPressed: _showWhatsAppDialog,
+                        ),
                       ),
-                      onPressed: _openRecreateOrder,
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.replay_rounded, size: 15),
+                          label: const Text('Recreate Order', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppConstants.textDark,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: AppConstants.radius5),
+                          ),
+                          onPressed: _openRecreateOrder,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

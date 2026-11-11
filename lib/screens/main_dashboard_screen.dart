@@ -15,6 +15,8 @@ import 'expenses_tab.dart';
 import 'menu_stock_tab.dart';
 import 'create_order_modal.dart';
 import 'login_screen.dart';
+import 'settings_screen.dart';
+import '../core/app_update_service.dart';
 
 class MainDashboardScreen extends StatefulWidget {
   const MainDashboardScreen({super.key});
@@ -34,6 +36,44 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     super.initState();
     _loadBranchSession();
     SupabaseService.instance.initRealtimeSubscription();
+    _checkAppUpdateSilently();
+  }
+
+  Future<void> _checkAppUpdateSilently() async {
+    try {
+      final info = await AppUpdateService.instance.checkForUpdate();
+      if (info.hasUpdate && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 8),
+            content: Row(
+              children: [
+                const Icon(Icons.system_update_rounded, color: Colors.greenAccent, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'New version ${info.latestVersion} available!',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            action: SnackBarAction(
+              label: 'UPDATE',
+              textColor: Colors.orangeAccent,
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadBranchSession() async {
@@ -212,6 +252,22 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               ),
               onPressed: _openCreateOrder,
             ),
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.settings_outlined,
+              color: AppConstants.textMuted,
+              size: 20,
+            ),
+            tooltip: 'Settings & Updates',
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            constraints: const BoxConstraints(),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(

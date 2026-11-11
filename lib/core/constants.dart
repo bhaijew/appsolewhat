@@ -9,6 +9,12 @@ class AppConstants {
   // Default Admin Password (matches pizza-main ADMIN_PASSWORD)
   static const String adminPassword = 'hal123';
 
+  // WhatsApp Automation Gateway (SoleWhat AI)
+  static const String waGatewayUrl = 'https://solewhat-production-33f6.up.railway.app';
+  static const String waApiKey = 'wag_8iBNQyfmDmSpZEvF0SsL7rtM2UzNzJ8M';
+  static const String defaultWaSessionId = 'wgyxj'; // Pizza Mafia / SoleWhat active session
+  static const String orderTrackerBaseUrl = 'https://pizza-murex-three.vercel.app';
+
   // Currency
   static const String currency = 'Rs. ';
 

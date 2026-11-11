@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -288,6 +291,90 @@ class SupabaseService {
     }
   }
 
+  // Standardize Pakistani and international phone numbers for WhatsApp
+  String formatWhatsAppPhone(String rawPhone) {
+    String digits = rawPhone.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('03') && digits.length == 11) {
+      digits = '92${digits.substring(1)}';
+    } else if (digits.startsWith('3') && digits.length == 10) {
+      digits = '92$digits';
+    }
+    return digits;
+  }
+
+  // Send WhatsApp Message via SoleWhat Railway Gateway
+  Future<Map<String, dynamic>> sendWhatsAppMessage({
+    required String toPhone,
+    required String message,
+    int? shopId,
+    String? customSessionId,
+  }) async {
+    try {
+      final formattedPhone = formatWhatsAppPhone(toPhone);
+      if (formattedPhone.length < 10) {
+        return {'success': false, 'error': 'Invalid phone number format ($toPhone)'};
+      }
+
+      String sessionId = customSessionId ?? AppConstants.defaultWaSessionId;
+      String apiKey = AppConstants.waApiKey;
+
+      if (customSessionId == null && shopId != null) {
+        try {
+          final shop = await client
+              .from('shops')
+              .select('whatsapp_session_id, whatsapp_api_key')
+              .eq('id', shopId)
+              .maybeSingle();
+          if (shop != null && (shop['whatsapp_session_id'] as String?)?.isNotEmpty == true) {
+            sessionId = shop['whatsapp_session_id'];
+            if ((shop['whatsapp_api_key'] as String?)?.isNotEmpty == true) {
+              apiKey = shop['whatsapp_api_key'];
+            }
+          }
+        } catch (_) {}
+      }
+
+      final url = Uri.parse('${AppConstants.waGatewayUrl}/api/messages/$sessionId/send');
+      final res = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: jsonEncode({
+          'to': formattedPhone,
+          'text': message,
+        }),
+      ).timeout(const Duration(seconds: 12));
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return {'success': true, 'data': res.body};
+      } else {
+        // Fallback retry with default session/key if shop custom failed
+        if (sessionId != AppConstants.defaultWaSessionId) {
+          final retryUrl = Uri.parse('${AppConstants.waGatewayUrl}/api/messages/${AppConstants.defaultWaSessionId}/send');
+          final retryRes = await http.post(
+            retryUrl,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': AppConstants.waApiKey,
+            },
+            body: jsonEncode({
+              'to': formattedPhone,
+              'text': message,
+            }),
+          ).timeout(const Duration(seconds: 12));
+          if (retryRes.statusCode >= 200 && retryRes.statusCode < 300) {
+            return {'success': true, 'data': retryRes.body};
+          }
+        }
+        return {'success': false, 'error': 'HTTP ${res.statusCode}: ${res.body}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   // Assign Rider to order and set status to ready (On Way / Dispatched)
   Future<bool> assignRiderToOrder(
     int orderId,
@@ -298,7 +385,7 @@ class SupabaseService {
     try {
       final orderData = await client
           .from('orders')
-          .select('id, notes, shop_id')
+          .select('id, order_number, customer_name, customer_phone, delivery_address, total, notes, shop_id')
           .eq('id', orderId)
           .maybeSingle();
 
@@ -340,6 +427,54 @@ class SupabaseService {
           }
         } catch (_) {}
       }
+
+      // ── SoleWhat AI Real-Time WhatsApp Automation ──
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final aiEnabled = prefs.getBool('ai_whatsapp_enabled') ?? true;
+
+        if (aiEnabled && orderData != null) {
+          final orderNum = orderData['order_number'] ?? orderId.toString();
+          final custPhone = orderData['customer_phone']?.toString().trim();
+          final custName = orderData['customer_name']?.toString().trim() ?? 'Customer';
+          final address = orderData['delivery_address']?.toString().trim() ?? 'Counter/Store';
+          final total = orderData['total']?.toString() ?? '0';
+
+          final autoCust = prefs.getBool('auto_customer_alert') ?? true;
+          final autoRider = prefs.getBool('auto_rider_alert') ?? true;
+
+          // 1. WhatsApp to Customer
+          if (autoCust && custPhone != null && custPhone.isNotEmpty) {
+            final custMsg = 'Salam $custName! 🍕🛵\n\n'
+                'Aapka Order #$orderNum rider $riderName ($riderPhone) ko handover kar diya gaya hai aur delivery ke liye on the way hai!\n'
+                'Total Bill: Rs. $total\n\n'
+                '📍 Live Status Tracker:\n${AppConstants.orderTrackerBaseUrl}/track/$orderNum\n\n'
+                'Thank you for ordering with SoleWhat!';
+
+            sendWhatsAppMessage(
+              toPhone: custPhone,
+              message: custMsg,
+              shopId: targetShop,
+            ).catchError((_) => <String, dynamic>{'success': false});
+          }
+
+          // 2. WhatsApp to Rider
+          if (autoRider && riderPhone.trim().isNotEmpty) {
+            final riderMsg = 'Salam $riderName! 🛵 Nayi Delivery Task:\n\n'
+                'Order: #$orderNum\n'
+                'Customer: $custName ($custPhone)\n'
+                'Address: $address\n'
+                'Total to Collect: Rs. $total\n'
+                '📍 Map / Tracker: ${AppConstants.orderTrackerBaseUrl}/track/$orderNum';
+
+            sendWhatsAppMessage(
+              toPhone: riderPhone.trim(),
+              message: riderMsg,
+              shopId: targetShop,
+            ).catchError((_) => <String, dynamic>{'success': false});
+          }
+        }
+      } catch (_) {}
 
       _latestCachedOrders = [];
       _cachedStreams.clear();
