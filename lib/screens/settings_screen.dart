@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_update_service.dart';
 import '../core/constants.dart';
@@ -74,11 +75,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _handleDownloadUpdate() async {
-    if (_updateInfo?.downloadUrl == null) return;
-    final ok = await AppUpdateService.instance.launchDownload(_updateInfo!.downloadUrl!);
+    final rawUrl = _updateInfo?.downloadUrl ?? 'https://github.com/bhaijew/appsolewhat/releases/latest';
+    final ok = await AppUpdateService.instance.launchDownload(rawUrl);
     if (!ok && mounted) {
+      await Clipboard.setData(ClipboardData(text: rawUrl));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open download link')),
+        SnackBar(
+          content: Text('Download link copied to clipboard: $rawUrl'),
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: Colors.white,
+            onPressed: () {},
+          ),
+          duration: const Duration(seconds: 6),
+        ),
       );
     }
   }

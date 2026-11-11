@@ -26,7 +26,7 @@ class AppUpdateService {
   AppUpdateService._();
   static final AppUpdateService instance = AppUpdateService._();
 
-  static const String currentAppVersion = '1.0.14';
+  static const String currentAppVersion = '1.0.15';
   static const String repoOwner = 'bhaijew';
   static const String repoName = 'appsolewhat';
   static const String releasesUrl = 'https://api.github.com/repos/$repoOwner/$repoName/releases/latest';
@@ -107,11 +107,27 @@ class AppUpdateService {
   /// Open browser or direct download for APK
   Future<bool> launchDownload(String url) async {
     try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        return await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final cleanUrl = url.trim();
+      final uri = Uri.parse(cleanUrl);
+      // Try external application first (Chrome / Default Android browser)
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched) return true;
+
+      // Fallback: try platform default mode
+      return await launchUrl(
+        uri,
+        mode: LaunchMode.platformDefault,
+      );
+    } catch (_) {
+      try {
+        final uri = Uri.parse(url.trim());
+        return await launchUrl(uri);
+      } catch (_) {
+        return false;
       }
-    } catch (_) {}
-    return false;
+    }
   }
 }
