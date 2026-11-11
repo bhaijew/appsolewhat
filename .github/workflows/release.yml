@@ -13,6 +13,7 @@ jobs:
   build:
     name: Build & Release APK
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout Repository
@@ -30,11 +31,18 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Accept Android Licenses
+        run: yes | flutter doctor --android-licenses || true
+
       - name: Install Dependencies
         run: flutter pub get
 
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x android/gradlew
+
       - name: Build APK (Release)
-        run: flutter build apk --release
+        timeout-minutes: 15
+        run: flutter build apk --release --verbose
 
       - name: Extract Tag or Version
         id: vars
@@ -46,7 +54,12 @@ jobs:
           fi
 
       - name: Copy Named APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/SoleWhat-Admin-${{ steps.vars.outputs.VERSION }}.apk
+        run: |
+          mkdir -p build/app/outputs/flutter-apk
+          if [ ! -f build/app/outputs/flutter-apk/app-release.apk ] && [ -f build/app/outputs/apk/release/app-release.apk ]; then
+            cp build/app/outputs/apk/release/app-release.apk build/app/outputs/flutter-apk/app-release.apk
+          fi
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/SoleWhat-Admin-${{ steps.vars.outputs.VERSION }}.apk
 
       - name: Create GitHub Release & Upload APK
         uses: softprops/action-gh-release@v2
