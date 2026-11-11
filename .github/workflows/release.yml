@@ -42,8 +42,11 @@ jobs:
           if [ "${{ github.ref_type }}" = "tag" ]; then
             echo "VERSION=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=v1.0.12-${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "VERSION=v1.0.14-${{ github.run_number }}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Copy Named APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/SoleWhat-Admin-${{ steps.vars.outputs.VERSION }}.apk
 
       - name: Create GitHub Release & Upload APK
         uses: softprops/action-gh-release@v2
@@ -53,6 +56,8 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/SoleWhat-Admin-${{ steps.vars.outputs.VERSION }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -13,7 +13,31 @@ class AppConstants {
   static const String waGatewayUrl = 'https://solewhat-production-33f6.up.railway.app';
   static const String waApiKey = 'wag_8iBNQyfmDmSpZEvF0SsL7rtM2UzNzJ8M';
   static const String defaultWaSessionId = 'wgyxj'; // Pizza Mafia / SoleWhat active session
-  static const String orderTrackerBaseUrl = 'https://pizza-murex-three.vercel.app';
+
+  // Domain & Multi-tenant Shop Subdomains
+  static const String baseDomain = 'solewhat.store';
+  static const String defaultShopSlug = 'pizza-mafia';
+
+  // Build shop storefront/tracking base URL: e.g. https://pizza-mafia.solewhat.store or https://demo.solewhat.store
+  static String buildShopBaseUrl(String? slug) {
+    final cleanSlug = (slug ?? '').trim().toLowerCase();
+    if (cleanSlug.isEmpty || cleanSlug == 'master' || cleanSlug == 'all') {
+      return 'https://$defaultShopSlug.$baseDomain';
+    }
+    return 'https://$cleanSlug.$baseDomain';
+  }
+
+  // Customer live tracking URL (e.g. https://pizza-mafia.solewhat.store/track/ORD-1234)
+  static String buildCustomerTrackUrl(String? slug, String orderNumber) {
+    final cleanOrder = Uri.encodeComponent(orderNumber.trim());
+    return '${buildShopBaseUrl(slug)}/track/$cleanOrder';
+  }
+
+  // Rider delivery portal & map link (e.g. https://pizza-mafia.solewhat.store/delivery/ORD-1234)
+  static String buildRiderDeliveryUrl(String? slug, String orderNumber) {
+    final cleanOrder = Uri.encodeComponent(orderNumber.trim());
+    return '${buildShopBaseUrl(slug)}/delivery/$cleanOrder';
+  }
 
   // Currency
   static const String currency = 'Rs. ';

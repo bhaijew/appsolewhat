@@ -108,7 +108,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     );
   }
 
-  void _showWhatsAppDialog() {
+  void _showWhatsAppDialog() async {
     final phone = widget.order.customerPhone?.trim() ?? '';
     if (phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -117,12 +117,22 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       return;
     }
 
+    final shopConfig = await SupabaseService.instance.getShopConfig(
+      widget.order.shopId,
+      orderNumber: widget.order.orderNumber,
+    );
+    final slug = shopConfig?['slug']?.toString().trim();
+    final shopName = shopConfig?['name']?.toString().trim() ?? 'SoleWhat';
+    final customerTrackUrl = AppConstants.buildCustomerTrackUrl(slug, widget.order.orderNumber);
+
+    if (!mounted) return;
+
     final defaultMsg = 'Salam ${widget.order.customerName}! 🍕\n\n'
         'Aapka Order #${widget.order.orderNumber} update:\n'
         'Status: ${_currentStatus.toUpperCase()}\n'
         'Total: Rs. ${widget.order.total.toStringAsFixed(0)}\n\n'
-        '📍 Live Status Tracker:\n${AppConstants.orderTrackerBaseUrl}/track/${widget.order.orderNumber}\n\n'
-        'Thank you for ordering with SoleWhat!';
+        '📍 Live Status Tracker:\n$customerTrackUrl\n\n'
+        'Thank you for ordering with $shopName!';
 
     final textCtrl = TextEditingController(text: defaultMsg);
     bool isSending = false;

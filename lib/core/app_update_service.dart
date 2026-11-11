@@ -26,7 +26,7 @@ class AppUpdateService {
   AppUpdateService._();
   static final AppUpdateService instance = AppUpdateService._();
 
-  static const String currentAppVersion = '1.0.13';
+  static const String currentAppVersion = '1.0.14';
   static const String repoOwner = 'bhaijew';
   static const String repoName = 'appsolewhat';
   static const String releasesUrl = 'https://api.github.com/repos/$repoOwner/$repoName/releases/latest';

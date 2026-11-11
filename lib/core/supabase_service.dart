@@ -302,6 +302,47 @@ class SupabaseService {
     return digits;
   }
 
+  // In-memory cache for shop metadata (slug, name, whatsapp credentials)
+  final Map<int, Map<String, dynamic>> _shopConfigCache = {};
+
+  // Fetch or resolve shop configuration by ID or by matching orderNumber
+  Future<Map<String, dynamic>?> getShopConfig(int? shopId, {String? orderNumber}) async {
+    if (shopId != null && _shopConfigCache.containsKey(shopId)) {
+      return _shopConfigCache[shopId];
+    }
+
+    try {
+      if (shopId != null) {
+        final shop = await client
+            .from('shops')
+            .select('id, name, slug, whatsapp_session_id, whatsapp_api_key')
+            .eq('id', shopId)
+            .maybeSingle();
+        if (shop != null) {
+          _shopConfigCache[shopId] = shop;
+          return shop;
+        }
+      }
+
+      // If shopId was null or unassigned, try resolving from orderNumber (e.g. ORD-demo1111-0002 -> demo)
+      if (orderNumber != null && orderNumber.isNotEmpty) {
+        final allShops = await client
+            .from('shops')
+            .select('id, name, slug, whatsapp_session_id, whatsapp_api_key');
+        for (final s in allShops) {
+          final slug = s['slug']?.toString().toLowerCase().trim();
+          if (slug != null && slug.isNotEmpty && orderNumber.toLowerCase().contains(slug)) {
+            final sid = (s['id'] as num?)?.toInt();
+            if (sid != null) _shopConfigCache[sid] = s;
+            return s;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   // Send WhatsApp Message via SoleWhat Railway Gateway
   Future<Map<String, dynamic>> sendWhatsAppMessage({
     required String toPhone,
@@ -319,19 +360,13 @@ class SupabaseService {
       String apiKey = AppConstants.waApiKey;
 
       if (customSessionId == null && shopId != null) {
-        try {
-          final shop = await client
-              .from('shops')
-              .select('whatsapp_session_id, whatsapp_api_key')
-              .eq('id', shopId)
-              .maybeSingle();
-          if (shop != null && (shop['whatsapp_session_id'] as String?)?.isNotEmpty == true) {
-            sessionId = shop['whatsapp_session_id'];
-            if ((shop['whatsapp_api_key'] as String?)?.isNotEmpty == true) {
-              apiKey = shop['whatsapp_api_key'];
-            }
+        final shop = await getShopConfig(shopId);
+        if (shop != null && (shop['whatsapp_session_id'] as String?)?.isNotEmpty == true) {
+          sessionId = shop['whatsapp_session_id'];
+          if ((shop['whatsapp_api_key'] as String?)?.isNotEmpty == true) {
+            apiKey = shop['whatsapp_api_key'];
           }
-        } catch (_) {}
+        }
       }
 
       final url = Uri.parse('${AppConstants.waGatewayUrl}/api/messages/$sessionId/send');
@@ -443,18 +478,28 @@ class SupabaseService {
           final autoCust = prefs.getBool('auto_customer_alert') ?? true;
           final autoRider = prefs.getBool('auto_rider_alert') ?? true;
 
+          // Resolve multi-tenant shop subdomain & custom WhatsApp session
+          final shopConfig = await getShopConfig(targetShop, orderNumber: orderNum);
+          final resolvedSlug = shopConfig?['slug']?.toString().trim();
+          final resolvedShopName = shopConfig?['name']?.toString().trim() ?? 'SoleWhat';
+          final shopSessionId = shopConfig?['whatsapp_session_id']?.toString().trim();
+
+          final customerTrackUrl = AppConstants.buildCustomerTrackUrl(resolvedSlug, orderNum);
+          final riderDeliveryUrl = AppConstants.buildRiderDeliveryUrl(resolvedSlug, orderNum);
+
           // 1. WhatsApp to Customer
           if (autoCust && custPhone != null && custPhone.isNotEmpty) {
             final custMsg = 'Salam $custName! 🍕🛵\n\n'
-                'Aapka Order #$orderNum rider $riderName ($riderPhone) ko handover kar diya gaya hai aur delivery ke liye on the way hai!\n'
+                'Aapka Order #$orderNum rider $riderName ($riderPhone) ko handover kar diya gaya hai aur delivery ke liye nikal chuka hai!\n'
                 'Total Bill: Rs. $total\n\n'
-                '📍 Live Status Tracker:\n${AppConstants.orderTrackerBaseUrl}/track/$orderNum\n\n'
-                'Thank you for ordering with SoleWhat!';
+                '📍 Live Status Tracker:\n$customerTrackUrl\n\n'
+                'Thank you for ordering with $resolvedShopName!';
 
             sendWhatsAppMessage(
               toPhone: custPhone,
               message: custMsg,
               shopId: targetShop,
+              customSessionId: shopSessionId,
             ).catchError((_) => <String, dynamic>{'success': false});
           }
 
@@ -464,13 +509,14 @@ class SupabaseService {
                 'Order: #$orderNum\n'
                 'Customer: $custName ($custPhone)\n'
                 'Address: $address\n'
-                'Total to Collect: Rs. $total\n'
-                '📍 Map / Tracker: ${AppConstants.orderTrackerBaseUrl}/track/$orderNum';
+                'Total to Collect: Rs. $total\n\n'
+                '📲 Delivery Portal & Map:\n$riderDeliveryUrl';
 
             sendWhatsAppMessage(
               toPhone: riderPhone.trim(),
               message: riderMsg,
               shopId: targetShop,
+              customSessionId: shopSessionId,
             ).catchError((_) => <String, dynamic>{'success': false});
           }
         }
