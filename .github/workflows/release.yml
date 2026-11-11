@@ -42,7 +42,7 @@ jobs:
 
       - name: Build APK (Release)
         timeout-minutes: 15
-        run: flutter build apk --release --verbose
+        run: flutter build apk --release --verbose --android-skip-build-dependency-validation
 
       - name: Extract Tag or Version
         id: vars
