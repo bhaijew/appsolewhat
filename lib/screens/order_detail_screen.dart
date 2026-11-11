@@ -125,16 +125,31 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     final shopName = shopConfig?['name']?.toString().trim() ?? 'SoleWhat';
     final customerTrackUrl = AppConstants.buildCustomerTrackUrl(slug, widget.order.orderNumber);
 
+    String reviewUrl = (shopConfig?['google_review_url']?.toString().trim()) ?? '';
+    if (reviewUrl.isEmpty) {
+      reviewUrl = AppConstants.buildReviewUrl(slug, widget.order.orderNumber);
+    }
+
     if (!mounted) return;
 
-    final defaultMsg = 'Salam ${widget.order.customerName}! 🍕\n\n'
+    final statusMsg = 'Salam ${widget.order.customerName}! 🍕\n\n'
         'Aapka Order #${widget.order.orderNumber} update:\n'
         'Status: ${_currentStatus.toUpperCase()}\n'
         'Total: Rs. ${widget.order.total.toStringAsFixed(0)}\n\n'
         '📍 Live Status Tracker:\n$customerTrackUrl\n\n'
         'Thank you for ordering with $shopName!';
 
-    final textCtrl = TextEditingController(text: defaultMsg);
+    final reviewMsg = 'Salam ${widget.order.customerName}! 🍕\n'
+        'We hope you enjoyed your order #${widget.order.orderNumber} from $shopName!\n\n'
+        '🌟 How was your food and experience today?\n'
+        'Please tap below to leave your quick 5-star review:\n'
+        '$reviewUrl\n\n'
+        'Your feedback directly helps us serve you better. Thank you!\n'
+        '— $shopName';
+
+    final textCtrl = TextEditingController(
+      text: _currentStatus == 'delivered' ? reviewMsg : statusMsg,
+    );
     bool isSending = false;
 
     showDialog(
@@ -155,9 +170,42 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             children: [
               Text('To: $phone', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppConstants.textMuted)),
               const SizedBox(height: 10),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    InkWell(
+                      onTap: () => setDialogState(() => textCtrl.text = statusMsg),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: textCtrl.text == statusMsg ? Colors.green.shade50 : AppConstants.bgLight,
+                          border: Border.all(color: textCtrl.text == statusMsg ? Colors.green : AppConstants.borderLight),
+                          borderRadius: AppConstants.radius5,
+                        ),
+                        child: const Text('📍 Tracker Update', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => setDialogState(() => textCtrl.text = reviewMsg),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: textCtrl.text == reviewMsg ? Colors.amber.shade50 : AppConstants.bgLight,
+                          border: Border.all(color: textCtrl.text == reviewMsg ? Colors.amber.shade700 : AppConstants.borderLight),
+                          borderRadius: AppConstants.radius5,
+                        ),
+                        child: const Text('⭐ 5-Star Review Link', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
               TextField(
                 controller: textCtrl,
-                maxLines: 5,
+                maxLines: 6,
                 style: const TextStyle(fontSize: 12),
                 decoration: InputDecoration(
                   border: OutlineInputBorder(borderRadius: AppConstants.radius5),
@@ -191,7 +239,21 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         message: textCtrl.text.trim(),
                         shopId: widget.order.shopId,
                       );
-                      if (dialogCtx.mounted) {
+                      if (res['success'] == true && textCtrl.text == reviewMsg) {
+                        try {
+                          final currentNotes = widget.order.notes ?? '';
+                          if (!currentNotes.contains('[REVIEW_PROMPT_SENT]')) {
+                            final updatedNotes = currentNotes.isEmpty
+                                ? '[REVIEW_PROMPT_SENT]'
+                                : '$currentNotes [REVIEW_PROMPT_SENT]';
+                            await SupabaseService.instance.client
+                                .from('orders')
+                                .update({'notes': updatedNotes})
+                                .eq('id', widget.order.id);
+                          }
+                        } catch (_) {}
+                      }
+                      if (mounted && dialogCtx.mounted) {
                         Navigator.pop(dialogCtx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(

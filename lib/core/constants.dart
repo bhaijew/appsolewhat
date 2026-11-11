@@ -39,6 +39,12 @@ class AppConstants {
     return '${buildShopBaseUrl(slug)}/delivery/$cleanOrder';
   }
 
+  // Customer Review URL (e.g. https://pizza-mafia.solewhat.store/review/ORD-1234)
+  static String buildReviewUrl(String? slug, String orderNumber) {
+    final cleanOrder = Uri.encodeComponent(orderNumber.trim());
+    return '${buildShopBaseUrl(slug)}/review/$cleanOrder';
+  }
+
   // Currency
   static const String currency = 'Rs. ';
 

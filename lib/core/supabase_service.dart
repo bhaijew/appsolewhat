@@ -302,7 +302,7 @@ class SupabaseService {
     return digits;
   }
 
-  // In-memory cache for shop metadata (slug, name, whatsapp credentials)
+  // In-memory cache for shop metadata (slug, name, whatsapp credentials, google review url)
   final Map<int, Map<String, dynamic>> _shopConfigCache = {};
 
   // Fetch or resolve shop configuration by ID or by matching orderNumber
@@ -315,10 +315,23 @@ class SupabaseService {
       if (shopId != null) {
         final shop = await client
             .from('shops')
-            .select('id, name, slug, whatsapp_session_id, whatsapp_api_key')
+            .select('id, name, slug, whatsapp_session_id, whatsapp_api_key, google_review_url')
             .eq('id', shopId)
             .maybeSingle();
         if (shop != null) {
+          // If shop has no custom google_review_url, check master shop_settings
+          if ((shop['google_review_url'] as String?)?.trim().isNotEmpty != true) {
+            try {
+              final master = await client
+                  .from('shop_settings')
+                  .select('google_review_url')
+                  .limit(1)
+                  .maybeSingle();
+              if (master != null && (master['google_review_url'] as String?)?.trim().isNotEmpty == true) {
+                shop['google_review_url'] = master['google_review_url'];
+              }
+            } catch (_) {}
+          }
           _shopConfigCache[shopId] = shop;
           return shop;
         }
@@ -328,7 +341,7 @@ class SupabaseService {
       if (orderNumber != null && orderNumber.isNotEmpty) {
         final allShops = await client
             .from('shops')
-            .select('id, name, slug, whatsapp_session_id, whatsapp_api_key');
+            .select('id, name, slug, whatsapp_session_id, whatsapp_api_key, google_review_url');
         for (final s in allShops) {
           final slug = s['slug']?.toString().toLowerCase().trim();
           if (slug != null && slug.isNotEmpty && orderNumber.toLowerCase().contains(slug)) {
@@ -405,6 +418,81 @@ class SupabaseService {
         }
         return {'success': false, 'error': 'HTTP ${res.statusCode}: ${res.body}'};
       }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Send Post-Delivery Customer Review Prompt via WhatsApp
+  Future<Map<String, dynamic>> sendWhatsAppReviewPrompt({
+    required int orderId,
+    required String orderNumber,
+    required String customerPhone,
+    String? customerName,
+    int? shopId,
+  }) async {
+    try {
+      final formattedPhone = formatWhatsAppPhone(customerPhone);
+      if (formattedPhone.length < 10) {
+        return {'success': false, 'error': 'Invalid phone number ($customerPhone)'};
+      }
+
+      // Check if review prompt was already sent to avoid spam
+      final orderData = await client
+          .from('orders')
+          .select('id, notes')
+          .eq('id', orderId)
+          .maybeSingle();
+
+      final currentNotes = orderData?['notes']?.toString() ?? '';
+      if (currentNotes.contains('[REVIEW_PROMPT_SENT]')) {
+        return {'success': true, 'message': 'Review prompt already sent previously.'};
+      }
+
+      // Resolve shop metadata (custom session, google review url, subdomain slug)
+      final shopConfig = await getShopConfig(shopId, orderNumber: orderNumber);
+      final shopName = shopConfig?['name']?.toString().trim() ?? 'SoleWhat';
+      final shopSlug = shopConfig?['slug']?.toString().trim();
+      final customSession = shopConfig?['whatsapp_session_id']?.toString().trim();
+
+      String reviewUrl = (shopConfig?['google_review_url']?.toString().trim()) ?? '';
+      if (reviewUrl.isEmpty) {
+        reviewUrl = AppConstants.buildReviewUrl(shopSlug, orderNumber);
+      }
+
+      final cust = (customerName != null && customerName.trim().isNotEmpty)
+          ? customerName.trim()
+          : 'Valued Customer';
+
+      final msg = 'Salam $cust! 🍕\n'
+          'We hope you enjoyed your order #$orderNumber from $shopName!\n\n'
+          '🌟 How was your food and experience today?\n'
+          'Please tap below to leave your quick 5-star review:\n'
+          '$reviewUrl\n\n'
+          'Your feedback directly helps us serve you better. Thank you!\n'
+          '— $shopName';
+
+      final sendRes = await sendWhatsAppMessage(
+        toPhone: formattedPhone,
+        message: msg,
+        shopId: shopId,
+        customSessionId: customSession,
+      );
+
+      // Append [REVIEW_PROMPT_SENT] to order notes so it never re-sends
+      final updatedNotes = currentNotes.isEmpty
+          ? '[REVIEW_PROMPT_SENT]'
+          : '$currentNotes [REVIEW_PROMPT_SENT]';
+
+      await client
+          .from('orders')
+          .update({
+            'notes': updatedNotes,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', orderId);
+
+      return sendRes;
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -695,6 +783,38 @@ class SupabaseService {
             'updated_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', orderId);
+
+      // ── Automated WhatsApp Review Prompt on Order Delivery ──
+      if (dbStatus == 'delivered') {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final aiEnabled = prefs.getBool('ai_whatsapp_enabled') ?? true;
+          final autoCust = prefs.getBool('auto_customer_alert') ?? true;
+
+          if (aiEnabled && autoCust) {
+            final ord = await client
+                .from('orders')
+                .select('id, order_number, customer_name, customer_phone, shop_id, notes')
+                .eq('id', orderId)
+                .maybeSingle();
+
+            if (ord != null) {
+              final phone = ord['customer_phone']?.toString().trim();
+              final notes = ord['notes']?.toString() ?? '';
+              if (phone != null && phone.isNotEmpty && !notes.contains('[REVIEW_PROMPT_SENT]')) {
+                sendWhatsAppReviewPrompt(
+                  orderId: orderId,
+                  orderNumber: ord['order_number']?.toString() ?? orderId.toString(),
+                  customerPhone: phone,
+                  customerName: ord['customer_name']?.toString(),
+                  shopId: (ord['shop_id'] as num?)?.toInt(),
+                ).catchError((_) => <String, dynamic>{'success': false});
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
       _latestCachedOrders = [];
       _cachedStreams.clear();
       realtimeUpdateNotifier.value++;
@@ -1638,6 +1758,36 @@ class SupabaseService {
           } catch (_) {}
         }
       }
+
+      // ── Automated Order Confirmation WhatsApp Alert ──
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final aiEnabled = prefs.getBool('ai_whatsapp_enabled') ?? true;
+        final autoCust = prefs.getBool('auto_customer_alert') ?? true;
+
+        if (aiEnabled && autoCust && customerPhone != null && customerPhone.trim().isNotEmpty) {
+          final shopConfig = await getShopConfig(shopId, orderNumber: orderNumber);
+          final resolvedSlug = shopConfig?['slug']?.toString().trim();
+          final resolvedShopName = shopConfig?['name']?.toString().trim() ?? 'SoleWhat';
+          final shopSessionId = shopConfig?['whatsapp_session_id']?.toString().trim();
+
+          final customerTrackUrl = AppConstants.buildCustomerTrackUrl(resolvedSlug, orderNumber);
+          final cName = customerName.trim().isEmpty ? 'Valued Customer' : customerName.trim();
+
+          final confMsg = 'Salam $cName! 🍕\n\n'
+              'Aapka Order #$orderNumber book ho chuka hai!\n'
+              'Type: ${orderType.toUpperCase()} | Total: Rs. ${total.toStringAsFixed(0)}\n\n'
+              '📍 Live Status Tracker:\n$customerTrackUrl\n\n'
+              'Thank you for ordering with $resolvedShopName!';
+
+          sendWhatsAppMessage(
+            toPhone: customerPhone.trim(),
+            message: confMsg,
+            shopId: shopId,
+            customSessionId: shopSessionId,
+          ).catchError((_) => <String, dynamic>{'success': false});
+        }
+      } catch (_) {}
 
       realtimeUpdateNotifier.value++;
 
