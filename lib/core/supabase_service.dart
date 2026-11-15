@@ -1703,22 +1703,32 @@ class SupabaseService {
       int seq = 1;
       try {
         final prefix = "ORD-$shopCode$dateCode-";
-        var q = client
+        final List<dynamic> allRecent = await client
             .from('orders')
-            .select('order_number, id, created_at')
+            .select('order_number, id, created_at, shop_id')
             .order('id', ascending: false)
-            .limit(40);
+            .limit(50);
 
-        if (shopId != null) {
-          q = q.eq('shop_id', shopId);
-        }
-
-        final List<dynamic> recent = await q;
+        final List<dynamic> recent = shopId != null
+            ? allRecent.where((r) => r['shop_id'] == shopId).toList()
+            : allRecent;
 
         int maxSeq = 0;
         for (final r in recent) {
           final ordNum = r['order_number']?.toString() ?? '';
-          if (ordNum.contains(dateCode) || ordNum.startsWith(prefix) || isOrderInTodayShift(r['created_at']?.toString() ?? '')) {
+          bool isMatch = ordNum.contains(dateCode) || ordNum.startsWith(prefix);
+          if (!isMatch) {
+            final createdAtStr = r['created_at']?.toString();
+            if (createdAtStr != null) {
+              final dt = DateTime.tryParse(createdAtStr);
+              if (dt != null) {
+                final localDt = dt.toLocal();
+                final nowLocal = DateTime.now();
+                isMatch = (localDt.year == nowLocal.year && localDt.month == nowLocal.month && localDt.day == nowLocal.day);
+              }
+            }
+          }
+          if (isMatch) {
             final match = RegExp(r'(\d+)$').firstMatch(ordNum);
             if (match != null) {
               final val = int.tryParse(match.group(1)!) ?? 0;
