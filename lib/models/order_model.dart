@@ -118,7 +118,23 @@ class PizzaOrder {
     if (json['items'] != null && json['items'] is List) {
       for (var it in json['items']) {
         if (it is Map<String, dynamic>) {
-          parsedItems.add(OrderItem.fromJson(it));
+          final item = OrderItem.fromJson(it);
+          final existingIdx = parsedItems.indexWhere((p) =>
+              p.name.trim().toLowerCase() == item.name.trim().toLowerCase() &&
+              p.variationName == item.variationName &&
+              (p.price - item.price).abs() < 0.01);
+          if (existingIdx >= 0) {
+            final old = parsedItems[existingIdx];
+            parsedItems[existingIdx] = OrderItem(
+              name: old.name,
+              price: old.price,
+              qty: old.qty + item.qty,
+              variationName: old.variationName,
+              toppings: old.toppings.isNotEmpty ? old.toppings : item.toppings,
+            );
+          } else {
+            parsedItems.add(item);
+          }
         }
       }
     }

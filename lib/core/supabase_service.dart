@@ -41,6 +41,7 @@ class SupabaseService {
         str.contains('clientexception') ||
         str.contains('os error') ||
         str.contains('handshakeexception') ||
+        str.contains('api.solewhat.store') ||
         str.contains('uadrrjrlhfttithjmdye')) {
       return 'No Internet Connection. Please check your WiFi or mobile data.';
     }
@@ -1823,8 +1824,11 @@ class SupabaseService {
       final nowIso = now.toUtc().toIso8601String();
       final timeStr = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
 
-      // Clean old recreate tags and append new [RECREATED: ...] tag
-      String cleanNotes = (existingNotes ?? '').replaceAll(RegExp(r'\[RECREATED[^\]]*\]'), '').trim();
+      // Clean old recreate tags and print request tags so stale prints do not re-fire
+      String cleanNotes = (existingNotes ?? '')
+          .replaceAll(RegExp(r'\[RECREATED[^\]]*\]', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\[PRINT_REQ:[^\]]*\]', caseSensitive: false), '')
+          .trim();
       final recreateTag = '[RECREATED: ${items.length} items modified at $timeStr]';
       final updatedNotes = cleanNotes.isNotEmpty ? '$cleanNotes $recreateTag' : recreateTag;
 

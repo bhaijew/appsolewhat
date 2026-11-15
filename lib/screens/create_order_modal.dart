@@ -43,13 +43,27 @@ class _CreateOrderModalState extends State<CreateOrderModal> {
       _feeCtrl.text = o.deliveryFee > 0 ? o.deliveryFee.toStringAsFixed(0) : '0';
       _paymentMethod = o.paymentMethod.toLowerCase().contains('online') ? 'online' : 'cash';
       for (final it in o.items) {
-        _cart.add(OrderItem(
-          name: it.name,
-          price: it.price,
-          qty: it.qty,
-          variationName: it.variationName,
-          toppings: it.toppings,
-        ));
+        final existingIdx = _cart.indexWhere((c) =>
+            c.name.trim().toLowerCase() == it.name.trim().toLowerCase() &&
+            c.variationName == it.variationName);
+        if (existingIdx >= 0) {
+          final old = _cart[existingIdx];
+          _cart[existingIdx] = OrderItem(
+            name: old.name,
+            price: old.price,
+            qty: old.qty + it.qty,
+            variationName: old.variationName,
+            toppings: old.toppings,
+          );
+        } else {
+          _cart.add(OrderItem(
+            name: it.name,
+            price: it.price,
+            qty: it.qty,
+            variationName: it.variationName,
+            toppings: it.toppings,
+          ));
+        }
       }
     }
     _loadInitial();
@@ -116,14 +130,29 @@ class _CreateOrderModalState extends State<CreateOrderModal> {
                       onTap: () {
                         Navigator.pop(ctx);
                         setState(() {
-                          _cart.add(
-                            OrderItem(
-                              name: product.name,
-                              price: v.price > 0 ? v.price : product.price,
-                              qty: 1,
-                              variationName: v.name,
-                            ),
-                          );
+                          final itemPrice = v.price > 0 ? v.price : product.price;
+                          final existingIdx = _cart.indexWhere((it) =>
+                              it.name.trim().toLowerCase() == product.name.trim().toLowerCase() &&
+                              it.variationName == v.name);
+                          if (existingIdx >= 0) {
+                            final old = _cart[existingIdx];
+                            _cart[existingIdx] = OrderItem(
+                              name: old.name,
+                              price: old.price,
+                              qty: old.qty + 1,
+                              variationName: old.variationName,
+                              toppings: old.toppings,
+                            );
+                          } else {
+                            _cart.add(
+                              OrderItem(
+                                name: product.name,
+                                price: itemPrice,
+                                qty: 1,
+                                variationName: v.name,
+                              ),
+                            );
+                          }
                         });
                       },
                     ),
@@ -136,13 +165,27 @@ class _CreateOrderModalState extends State<CreateOrderModal> {
       );
     } else {
       setState(() {
-        _cart.add(
-          OrderItem(
-            name: product.name,
-            price: product.price,
-            qty: 1,
-          ),
-        );
+        final existingIdx = _cart.indexWhere((it) =>
+            it.name.trim().toLowerCase() == product.name.trim().toLowerCase() &&
+            it.variationName == null);
+        if (existingIdx >= 0) {
+          final old = _cart[existingIdx];
+          _cart[existingIdx] = OrderItem(
+            name: old.name,
+            price: old.price,
+            qty: old.qty + 1,
+            variationName: old.variationName,
+            toppings: old.toppings,
+          );
+        } else {
+          _cart.add(
+            OrderItem(
+              name: product.name,
+              price: product.price,
+              qty: 1,
+            ),
+          );
+        }
       });
     }
   }
@@ -169,6 +212,26 @@ class _CreateOrderModalState extends State<CreateOrderModal> {
     final name = _nameCtrl.text.trim().isEmpty ? 'Walk-in Customer' : _nameCtrl.text.trim();
     final isRecreating = widget.recreateOrder != null;
 
+    // Consolidate identical items in cart so duplicate lines are merged into quantities
+    final List<OrderItem> consolidatedCart = [];
+    for (final it in _cart) {
+      final existingIdx = consolidatedCart.indexWhere((c) =>
+          c.name.trim().toLowerCase() == it.name.trim().toLowerCase() &&
+          c.variationName == it.variationName);
+      if (existingIdx >= 0) {
+        final old = consolidatedCart[existingIdx];
+        consolidatedCart[existingIdx] = OrderItem(
+          name: old.name,
+          price: old.price,
+          qty: old.qty + it.qty,
+          variationName: old.variationName,
+          toppings: old.toppings,
+        );
+      } else {
+        consolidatedCart.add(it);
+      }
+    }
+
     setState(() => _isSubmitting = true);
 
     final Map<String, dynamic> res;
@@ -184,7 +247,7 @@ class _CreateOrderModalState extends State<CreateOrderModal> {
         tokenNumber: widget.recreateOrder!.tokenNumber,
         deliveryAddress: _orderType == 'delivery' ? _addressCtrl.text.trim() : null,
         deliveryFee: _deliveryFee,
-        items: _cart,
+        items: consolidatedCart,
         total: _total,
         paymentMethod: _paymentMethod,
         existingNotes: widget.recreateOrder!.notes,
@@ -199,7 +262,7 @@ class _CreateOrderModalState extends State<CreateOrderModal> {
         tableNumber: _orderType == 'dine_in' ? _tableCtrl.text.trim() : null,
         deliveryAddress: _orderType == 'delivery' ? _addressCtrl.text.trim() : null,
         deliveryFee: _deliveryFee,
-        items: _cart,
+        items: consolidatedCart,
         total: _total,
         paymentMethod: _paymentMethod,
         shopId: _shopId,

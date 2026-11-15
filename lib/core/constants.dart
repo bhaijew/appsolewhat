@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 
 class AppConstants {
   // Supabase Configuration (Admin Client with full Service Role access for Branch Command Center)
-  static const String supabaseUrl = 'https://uadrrjrlhfttithjmdye.supabase.co';
+  static const String supabaseUrl = 'https://api.solewhat.store';
   static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhZHJyanJsaGZ0dGl0aGptZHllIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDYwNTg2OCwiZXhwIjoyMTA2MTgxODY4fQ.NuC74GhFlUEiaRR2BXPooYj7iahzrXXKCxMQYDUnfIg';
+      'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc5NDY0NDQ2MCwiZXhwIjo0OTUwMzE4MDYwLCJyb2xlIjoic2VydmljZV9yb2xlIn0._XJCDg3ziLno1PZHc_FVafmFaIf8L_LgvvOb3L6fWUQ';
 
   // Default Admin Password (matches pizza-main ADMIN_PASSWORD)
   static const String adminPassword = 'hal123';
 
   // WhatsApp Automation Gateway (SoleWhat AI)
-  static const String waGatewayUrl = 'https://solewhat-production-33f6.up.railway.app';
+  static const String waGatewayUrl = 'https://wa.solewhat.store';
   static const String waApiKey = 'wag_8iBNQyfmDmSpZEvF0SsL7rtM2UzNzJ8M';
   static const String defaultWaSessionId = 'wgyxj'; // Pizza Mafia / SoleWhat active session
 
