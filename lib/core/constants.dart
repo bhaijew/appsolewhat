@@ -11,8 +11,8 @@ class AppConstants {
 
   // WhatsApp Automation Gateway (SoleWhat AI)
   static const String waGatewayUrl = 'https://wa.solewhat.store';
-  static const String waApiKey = 'wag_8iBNQyfmDmSpZEvF0SsL7rtM2UzNzJ8M';
-  static const String defaultWaSessionId = 'wgyxj'; // Pizza Mafia / SoleWhat active session
+  static const String waApiKey = 'wag_Yooc9iqdcQggxvfdO3OyvurvcKRbCE9d';
+  static const String defaultWaSessionId = '3x2ols'; // Pizza Mafia connected session (03341754804)
 
   // Domain & Multi-tenant Shop Subdomains
   static const String baseDomain = 'solewhat.store';

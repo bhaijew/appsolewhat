@@ -373,10 +373,12 @@ class SupabaseService {
       String sessionId = customSessionId ?? AppConstants.defaultWaSessionId;
       String apiKey = AppConstants.waApiKey;
 
-      if (customSessionId == null && shopId != null) {
+      if (shopId != null) {
         final shop = await getShopConfig(shopId);
-        if (shop != null && (shop['whatsapp_session_id'] as String?)?.isNotEmpty == true) {
-          sessionId = shop['whatsapp_session_id'];
+        if (shop != null) {
+          if (customSessionId == null && (shop['whatsapp_session_id'] as String?)?.isNotEmpty == true) {
+            sessionId = shop['whatsapp_session_id'];
+          }
           if ((shop['whatsapp_api_key'] as String?)?.isNotEmpty == true) {
             apiKey = shop['whatsapp_api_key'];
           }
@@ -1676,32 +1678,63 @@ class SupabaseService {
       if (shopId != null) {
         if (shopId == 7) {
           shopCode = 'pm';
-        } else if (shopId == 8) {
+        } else if (shopId == 8 || shopId == 11) {
           shopCode = 'demo';
         } else if (shopId == 10) {
           shopCode = 'shah';
         } else {
-          shopCode = 's$shopId';
+          try {
+            final cfg = await getShopConfig(shopId);
+            final slug = (cfg?['slug'] ?? '').toString().toLowerCase().trim();
+            final name = (cfg?['name'] ?? '').toString().toLowerCase().trim();
+            if (slug.contains('demo') || name.contains('demo') || shopId == 11) {
+              shopCode = 'demo';
+            } else if (slug.contains('mafia') || name.contains('mafia') || shopId == 7) {
+              shopCode = 'pm';
+            } else {
+              shopCode = 's$shopId';
+            }
+          } catch (_) {
+            shopCode = 's$shopId';
+          }
         }
       }
 
       int seq = 1;
       try {
         final prefix = "ORD-$shopCode$dateCode-";
-        final List<dynamic> latest = await client
+        var q = client
             .from('orders')
-            .select('order_number, id')
-            .like('order_number', '$prefix%')
+            .select('order_number, id, created_at')
             .order('id', ascending: false)
-            .limit(1);
+            .limit(40);
 
-        if (latest.isNotEmpty) {
-          final lastNum = latest[0]['order_number']?.toString() ?? '';
-          final match = RegExp(r'(\d+)$').firstMatch(lastNum);
+        if (shopId != null) {
+          q = q.eq('shop_id', shopId);
+        }
+
+        final List<dynamic> recent = await q;
+
+        int maxSeq = 0;
+        for (final r in recent) {
+          final ordNum = r['order_number']?.toString() ?? '';
+          if (ordNum.contains(dateCode) || ordNum.startsWith(prefix) || isOrderInTodayShift(r['created_at']?.toString() ?? '')) {
+            final match = RegExp(r'(\d+)$').firstMatch(ordNum);
+            if (match != null) {
+              final val = int.tryParse(match.group(1)!) ?? 0;
+              if (val > maxSeq) {
+                maxSeq = val;
+              }
+            }
+          }
+        }
+
+        if (maxSeq > 0) {
+          seq = maxSeq + 1;
+        } else if (recent.isNotEmpty) {
+          final match = RegExp(r'(\d+)$').firstMatch(recent[0]['order_number']?.toString() ?? '');
           if (match != null) {
-            seq = int.parse(match.group(1)!) + 1;
-          } else {
-            seq = ((latest[0]['id'] as num?)?.toInt() ?? 0) + 1;
+            seq = (int.tryParse(match.group(1)!) ?? 0) + 1;
           }
         }
       } catch (_) {
