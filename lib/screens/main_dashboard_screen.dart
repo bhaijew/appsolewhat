@@ -283,7 +283,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           const SizedBox(width: 6),
         ],
       ),
-      body: IndexedStack(index: _currentIndex, children: screens),
+      body: AnimatedIndexedStack(index: _currentIndex, children: screens),
 
       // 🌟 FLOATING GLASS NAVBAR (With Compact Small Page Names)
       bottomNavigationBar: _buildGlassFloatingNavBar(),
@@ -467,51 +467,56 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AnimatedScale(
-                    scale: isSelected ? 1.15 : 1.0,
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutBack,
-                    child: Icon(
-                      icon,
-                      size: 19,
-                      color: isSelected
-                          ? AppConstants.primary
-                          : AppConstants.textMuted,
-                    ),
-                  ),
-                  if (hasBadge)
-                    StreamBuilder<List<PizzaOrder>>(
-                      stream: SupabaseService.instance.streamUnverifiedOrders(
-                        shopId: _shopId,
+              AnimatedSlide(
+                offset: isSelected ? const Offset(0, -0.06) : Offset.zero,
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedScale(
+                      scale: isSelected ? 1.15 : 1.0,
+                      duration: const Duration(milliseconds: 240),
+                      curve: Curves.easeOutBack,
+                      child: Icon(
+                        icon,
+                        size: 19,
+                        color: isSelected
+                            ? AppConstants.primary
+                            : AppConstants.textMuted,
                       ),
-                      builder: (ctx, snap) {
-                        final count = snap.data?.length ?? 0;
-                        if (count == 0) return const SizedBox.shrink();
-                        return Positioned(
-                          right: -5,
-                          top: -3,
-                          child: Container(
-                            padding: const EdgeInsets.all(2.5),
-                            decoration: const BoxDecoration(
-                              color: Colors.amber,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
+                    ),
+                    if (hasBadge)
+                      StreamBuilder<List<PizzaOrder>>(
+                        stream: SupabaseService.instance.streamUnverifiedOrders(
+                          shopId: _shopId,
+                        ),
+                        builder: (ctx, snap) {
+                          final count = snap.data?.length ?? 0;
+                          if (count == 0) return const SizedBox.shrink();
+                          return Positioned(
+                            right: -5,
+                            top: -3,
+                            child: Container(
+                              padding: const EdgeInsets.all(2.5),
+                              decoration: const BoxDecoration(
+                                color: Colors.amber,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-                ],
+                          );
+                        },
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(height: 2),
               // Compact 8.5px sleek label
@@ -532,6 +537,70 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class AnimatedIndexedStack extends StatefulWidget {
+  final int index;
+  final List<Widget> children;
+  final Duration duration;
+
+  const AnimatedIndexedStack({
+    super.key,
+    required this.index,
+    required this.children,
+    this.duration = const Duration(milliseconds: 280),
+  });
+
+  @override
+  State<AnimatedIndexedStack> createState() => _AnimatedIndexedStackState();
+}
+
+class _AnimatedIndexedStackState extends State<AnimatedIndexedStack>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.0, 0.04), // Subtle modern lift-up animation
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedIndexedStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.index != oldWidget.index) {
+      _controller.reset();
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: IndexedStack(
+          index: widget.index,
+          children: widget.children,
         ),
       ),
     );
