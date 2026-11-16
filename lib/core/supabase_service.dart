@@ -1741,11 +1741,9 @@ class SupabaseService {
 
         if (maxSeq > 0) {
           seq = maxSeq + 1;
-        } else if (recent.isNotEmpty) {
-          final match = RegExp(r'(\d+)$').firstMatch(recent[0]['order_number']?.toString() ?? '');
-          if (match != null) {
-            seq = (int.tryParse(match.group(1)!) ?? 0) + 1;
-          }
+        } else {
+          // New business day starts strictly at 1 (0001) - never inherit yesterday's closing sequence!
+          seq = 1;
         }
       } catch (_) {
         seq = (now.millisecondsSinceEpoch % 900) + 1;
