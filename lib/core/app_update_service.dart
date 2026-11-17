@@ -10,6 +10,7 @@ class UpdateInfo {
   final String? releaseNotes;
   final String releaseName;
   final DateTime? publishedAt;
+  final bool forceUpdate;
 
   UpdateInfo({
     required this.currentVersion,
@@ -19,6 +20,7 @@ class UpdateInfo {
     this.releaseNotes,
     required this.releaseName,
     this.publishedAt,
+    this.forceUpdate = false,
   });
 }
 
@@ -27,6 +29,9 @@ class AppUpdateService {
   static final AppUpdateService instance = AppUpdateService._();
 
   static const String currentAppVersion = '1.0.20';
+  static const String directVersionUrl = 'https://solewhat.store/api/app/version';
+  static const String fallbackVersionUrl = 'https://solewhat.store/version.json';
+  static const String defaultApkUrl = 'https://solewhat.store/pizza-admin.apk';
   static const String repoOwner = 'bhaijew';
   static const String repoName = 'appsolewhat';
   static const String releasesUrl = 'https://api.github.com/repos/$repoOwner/$repoName/releases/latest';
@@ -48,8 +53,45 @@ class AppUpdateService {
     return false;
   }
 
-  /// Check GitHub Releases for the latest APK
+  /// Check server version.json first, fallback to GitHub Releases
   Future<UpdateInfo> checkForUpdate() async {
+    // 1. Try our own server's fast JSON endpoint first
+    for (final url in [directVersionUrl, fallbackVersionUrl]) {
+      try {
+        final res = await http.get(
+          Uri.parse(url),
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'SoleWhat-Admin-App',
+          },
+        ).timeout(const Duration(seconds: 5));
+
+        if (res.statusCode == 200) {
+          final data = json.decode(res.body);
+          if (data is Map<String, dynamic> && data['version'] != null) {
+            final latestVer = data['version']?.toString().replaceAll('v', '').trim() ?? '';
+            final apkUrl = data['download_url']?.toString().trim() ?? defaultApkUrl;
+            final notes = data['release_notes']?.toString() ?? '';
+            final isForce = data['force_update'] == true;
+            final hasNewer = _isNewerVersion(latestVer, currentAppVersion);
+
+            return UpdateInfo(
+              currentVersion: currentAppVersion,
+              latestVersion: latestVer,
+              hasUpdate: hasNewer,
+              downloadUrl: apkUrl,
+              releaseNotes: notes,
+              releaseName: 'v$latestVer',
+              forceUpdate: isForce,
+            );
+          }
+        }
+      } catch (_) {
+        // try next endpoint
+      }
+    }
+
+    // 2. Fallback to GitHub Releases API if server was temporarily unreachable
     try {
       final res = await http.get(
         Uri.parse(releasesUrl),
@@ -57,7 +99,7 @@ class AppUpdateService {
           'Accept': 'application/vnd.github.v3+json',
           'User-Agent': 'SoleWhat-Admin-App',
         },
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 8));
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body) as Map<String, dynamic>;
@@ -79,9 +121,7 @@ class AppUpdateService {
           }
         }
 
-        // Fallback to release HTML url if no direct APK asset
-        apkUrl ??= data['html_url']?.toString();
-
+        apkUrl ??= defaultApkUrl;
         final hasNewer = _isNewerVersion(tagName, currentAppVersion);
 
         return UpdateInfo(

@@ -43,37 +43,127 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     try {
       final info = await AppUpdateService.instance.checkForUpdate();
       if (info.hasUpdate && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF1E293B),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 8),
-            content: Row(
+        _showUpdateDialog(info);
+      }
+    } catch (_) {}
+  }
+
+  void _showUpdateDialog(UpdateInfo info) {
+    showDialog(
+      context: context,
+      barrierDismissible: !info.forceUpdate,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.system_update_rounded, color: Colors.deepOrange, size: 28),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Update Available', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    'v${info.currentVersion}  →  v${info.latestVersion}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (info.releaseNotes != null && info.releaseNotes!.isNotEmpty) ...[
+              Text(
+                'What\'s New:',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Text(
+                  info.releaseNotes!,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.4),
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.shield_outlined, color: Colors.amber.shade800, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Purani app delete karne ki zaroorat nahi. Aap ka PIN aur settings mehfooz rahengi.',
+                      style: TextStyle(fontSize: 11, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
               children: [
-                const Icon(Icons.system_update_rounded, color: Colors.greenAccent, size: 20),
-                const SizedBox(width: 8),
+                if (!info.forceUpdate)
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text('Baad Mein', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                if (!info.forceUpdate) const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    'New version ${info.latestVersion} available!',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.download_rounded, size: 18),
+                    label: const Text('Update Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      AppUpdateService.instance.launchDownload(
+                        info.downloadUrl ?? AppUpdateService.defaultApkUrl,
+                      );
+                    },
                   ),
                 ),
               ],
             ),
-            action: SnackBarAction(
-              label: 'UPDATE',
-              textColor: Colors.orangeAccent,
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                );
-              },
-            ),
-          ),
-        );
-      }
-    } catch (_) {}
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadBranchSession() async {

@@ -75,10 +75,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _handleDownloadUpdate() async {
-    final rawUrl = _updateInfo?.downloadUrl ?? 'https://github.com/bhaijew/appsolewhat/releases/latest';
+    final rawUrl = _updateInfo?.downloadUrl ?? AppUpdateService.defaultApkUrl;
     final ok = await AppUpdateService.instance.launchDownload(rawUrl);
     if (!ok && mounted) {
       await Clipboard.setData(ClipboardData(text: rawUrl));
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Download link copied to clipboard: $rawUrl'),
